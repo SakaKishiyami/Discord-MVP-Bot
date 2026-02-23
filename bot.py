@@ -1174,27 +1174,40 @@ def start_http_server():
         port = int(os.getenv('PORT', 10000))
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
-        print(f"HTTP server started on port {port}")
+        print(f"✅ HTTP server started on port {port}")
+        print(f"✅ Health check available at http://0.0.0.0:{port}/")
     
     # Run in new event loop in background thread
     import threading
     def run_server():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(setup_server())
-        loop.run_forever()
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(setup_server())
+            loop.run_forever()
+        except Exception as e:
+            print(f"❌ HTTP server error: {e}")
+            import traceback
+            traceback.print_exc()
     
     thread = threading.Thread(target=run_server, daemon=True)
     thread.start()
+    # Give it a moment to start
+    import time
+    time.sleep(0.5)
 
 if __name__ == '__main__':
+    print("🚀 Starting MVP Bot...")
     token = os.getenv('DISCORD_TOKEN')
     if not token:
-        print("Error: DISCORD_TOKEN not found in environment variables!")
+        print("❌ Error: DISCORD_TOKEN not found in environment variables!")
         print("Please create a .env file with your bot token.")
     else:
+        print("✅ Bot token found")
         # Start HTTP server in background thread (for Render port detection)
+        print("🌐 Starting HTTP server for Render...")
         start_http_server()
         
         # Start Discord bot (blocking call)
+        print("🤖 Starting Discord bot...")
         bot.run(token)
