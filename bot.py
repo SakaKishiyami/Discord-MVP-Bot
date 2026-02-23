@@ -90,14 +90,14 @@ def format_rotation_list(data: Dict, next_index: int) -> str:
         
         # Check if last MVP had title
         last_had_title = player.get('last_had_title', False)
-        title_emoji = "👑" if last_had_title else ""
+        title_emoji = " 👑" if last_had_title else ""
         
         if i == next_index:
-            # Next player - bigger and bolded
-            lines.append(f"**>>> {game_name}** {mention}{owed_str} {mvp_symbol}{title_emoji} <NEXT")
+            # Next player - bigger and bolded, with arrow indicator
+            lines.append(f"**➜ {game_name}** {mention}{owed_str} {mvp_symbol}{title_emoji}")
         else:
-            # Regular player
-            lines.append(f"{game_name} {mention}{owed_str} {mvp_symbol}{title_emoji}")
+            # Regular player with emoji indicators for actions
+            lines.append(f"{game_name} {mention}{owed_str} {mvp_symbol}{title_emoji}  `✅⬆️⬇️❌`")
     
     return "\n".join(lines)
 
@@ -112,7 +112,7 @@ def format_inactive_list(data: Dict) -> str:
         game_name = player.get('game_name', 'Unknown')
         discord_id = player.get('discord_id')
         mention = f"<@{discord_id}>" if discord_id else ""
-        lines.append(f"{game_name} {mention}")
+        lines.append(f"{game_name} {mention}  `✅❌`")
     
     return "\n".join(lines)
 
@@ -527,12 +527,12 @@ async def update_officer_channel(channel: discord.TextChannel, data: Dict, next_
     inactive_text = format_inactive_list(data)
     
     embed = discord.Embed(
-        title="MVP Rotation",
+        title="🎯 MVP Rotation",
         description=f"**Rotation:**\n{rotation_text}\n\n**Inactive:**\n{inactive_text}",
         color=discord.Color.blue()
     )
     
-    embed.set_footer(text="Use the dropdowns below to manage players")
+    embed.set_footer(text="Use dropdowns below or emoji indicators: ✅ Complete | ⬆️ Move Up | ⬇️ Move Down | ❌ Inactive")
     
     # Find existing message or create new one
     view = PlayerManagementView(data, next_index)
@@ -583,42 +583,41 @@ def format_stats(data: Dict) -> str:
             'stats': player_stats
         })
     
-    # Format in columns
+    # Format in columns with better spacing to prevent wrapping
     lines = []
     max_rows = max(len(active_players), len(inactive_players), len(past_players))
     
-    # Header
-    header = "ACTIVE MEMBERS".ljust(30) + "INACTIVE MEMBERS".ljust(30) + "PAST MEMBERS"
+    # Header with better spacing
+    header = "**ACTIVE**".ljust(38) + "**INACTIVE**".ljust(38) + "**PAST**"
     lines.append(header)
-    lines.append("-" * 90)
+    lines.append("─" * 114)
     
-    # Format each row
+    # Format each row with better spacing
     for i in range(max_rows):
         active_str = ""
         if i < len(active_players):
             p = active_players[i]
             s = p['stats']
-            # Truncate name if too long
-            name = p['name'][:15] if len(p['name']) > 15 else p['name']
+            name = p['name'][:20] if len(p['name']) > 20 else p['name']
             active_str = f"{name}: 🎯{s['events']} ⭐{s['row']} 🏆{s['ranking']} 👑{s['titles']}"
         
         inactive_str = ""
         if i < len(inactive_players):
             p = inactive_players[i]
             s = p['stats']
-            name = p['name'][:15] if len(p['name']) > 15 else p['name']
+            name = p['name'][:20] if len(p['name']) > 20 else p['name']
             inactive_str = f"{name}: 🎯{s['events']} ⭐{s['row']} 🏆{s['ranking']} 👑{s['titles']}"
         
         past_str = ""
         if i < len(past_players):
             p = past_players[i]
             s = p['stats']
-            name = p['name'][:15] if len(p['name']) > 15 else p['name']
+            name = p['name'][:20] if len(p['name']) > 20 else p['name']
             past_str = f"{name}: 🎯{s['events']} ⭐{s['row']} 🏆{s['ranking']} 👑{s['titles']}"
         
-        # Pad columns
-        active_padded = active_str.ljust(30) if active_str else "".ljust(30)
-        inactive_padded = inactive_str.ljust(30) if inactive_str else "".ljust(30)
+        # Pad columns with better spacing (38 chars per column)
+        active_padded = active_str.ljust(38) if active_str else "".ljust(38)
+        inactive_padded = inactive_str.ljust(38) if inactive_str else "".ljust(38)
         past_padded = past_str if past_str else ""
         
         lines.append(f"{active_padded}{inactive_padded}{past_padded}")
@@ -675,17 +674,19 @@ async def update_stats_channel(channel: discord.TextChannel, data: Dict):
 @bot.event
 async def on_ready():
     print(f'{bot.user} has logged in!')
-    print(f'Bot ID: {bot.user.id}')
     # Sync commands
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} command(s)")
-        for cmd in synced:
-            print(f"  - /{cmd.name}")
+        guild_id = os.getenv('GUILD_ID')
+        if guild_id:
+            # Sync to specific guild (faster, appears immediately)
+            guild = discord.Object(id=int(guild_id))
+            synced = await bot.tree.sync(guild=guild)
+        else:
+            # Sync globally (takes up to 1 hour to appear)
+            synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s)")
     except Exception as e:
-        print(f"❌ Failed to sync commands: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Failed to sync commands: {e}")
 
 @bot.tree.command(name="add_player", description="Add a player to the rotation")
 async def add_player(interaction: discord.Interaction, game_name: str, member: discord.Member):
@@ -1174,40 +1175,28 @@ def start_http_server():
         port = int(os.getenv('PORT', 10000))
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
-        print(f"✅ HTTP server started on port {port}")
-        print(f"✅ Health check available at http://0.0.0.0:{port}/")
     
     # Run in new event loop in background thread
     import threading
     def run_server():
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(setup_server())
-            loop.run_forever()
-        except Exception as e:
-            print(f"❌ HTTP server error: {e}")
-            import traceback
-            traceback.print_exc()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(setup_server())
+        loop.run_forever()
     
     thread = threading.Thread(target=run_server, daemon=True)
     thread.start()
-    # Give it a moment to start
     import time
     time.sleep(0.5)
 
 if __name__ == '__main__':
-    print("🚀 Starting MVP Bot...")
     token = os.getenv('DISCORD_TOKEN')
     if not token:
-        print("❌ Error: DISCORD_TOKEN not found in environment variables!")
+        print("Error: DISCORD_TOKEN not found in environment variables!")
         print("Please create a .env file with your bot token.")
     else:
-        print("✅ Bot token found")
         # Start HTTP server in background thread (for Render port detection)
-        print("🌐 Starting HTTP server for Render...")
         start_http_server()
         
         # Start Discord bot (blocking call)
-        print("🤖 Starting Discord bot...")
         bot.run(token)
