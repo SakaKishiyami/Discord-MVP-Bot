@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+data/
+*.log
+README.md
+RENDER_DEPLOY.md
+GIT_SETUP.md
