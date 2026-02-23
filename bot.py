@@ -30,8 +30,35 @@ DATA_FILE = 'data/mvp_data.json'
 def load_data():
     """Load MVP data from JSON file"""
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
+        try:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Ensure all required keys exist
+                if 'rotation' not in data:
+                    data['rotation'] = []
+                if 'inactive' not in data:
+                    data['inactive'] = []
+                if 'past_members' not in data:
+                    data['past_members'] = []
+                if 'logs' not in data:
+                    data['logs'] = {'events': [], 'row': [], 'ranking': []}
+                if 'stats' not in data:
+                    data['stats'] = {}
+                return data
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading data file: {e}")
+            # Return default structure if file is corrupted
+            return {
+                'rotation': [],
+                'inactive': [],
+                'past_members': [],
+                'logs': {
+                    'events': [],
+                    'row': [],
+                    'ranking': []
+                },
+                'stats': {}
+            }
     return {
         'rotation': [],
         'inactive': [],
@@ -41,14 +68,29 @@ def load_data():
             'row': [],
             'ranking': []
         },
-        'stats': {}  # Will store player stats: {discord_id: {events: 0, row: 0, ranking: 0, titles: 0}}
+        'stats': {}
     }
 
 def save_data(data):
     """Save MVP data to JSON file"""
     os.makedirs('data', exist_ok=True)
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    # Ensure all required keys exist before saving
+    if 'rotation' not in data:
+        data['rotation'] = []
+    if 'inactive' not in data:
+        data['inactive'] = []
+    if 'past_members' not in data:
+        data['past_members'] = []
+    if 'logs' not in data:
+        data['logs'] = {'events': [], 'row': [], 'ranking': []}
+    if 'stats' not in data:
+        data['stats'] = {}
+    
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        print(f"Error saving data file: {e}")
 
 def format_player_name(player: Dict) -> str:
     """Format player name with Discord mention"""
@@ -59,7 +101,7 @@ def format_player_name(player: Dict) -> str:
 
 def format_rotation_list(data: Dict, next_index: int) -> str:
     """Format the rotation list with proper formatting"""
-    rotation = data['rotation']
+    rotation = data.get('rotation', [])
     if not rotation:
         return "No players in rotation."
     
@@ -394,6 +436,7 @@ class InactiveActionView(discord.ui.View):
             return
         
         player = inactive.pop(player_index)
+        # Ensure rotation list exists (don't reset if it does)
         if 'rotation' not in data:
             data['rotation'] = []
         data['rotation'].append(player)
@@ -693,10 +736,20 @@ async def add_player(interaction: discord.Interaction, game_name: str, member: d
     """Add a player to the rotation"""
     data = load_data()
     
-    # Check if player already exists
+    # Ensure rotation list exists
+    if 'rotation' not in data:
+        data['rotation'] = []
+    
+    # Check if player already exists in rotation
     for player in data['rotation']:
         if player.get('discord_id') == member.id:
             await interaction.response.send_message(f"{member.mention} is already in the rotation!", ephemeral=True)
+            return
+    
+    # Check if player exists in inactive
+    for player in data.get('inactive', []):
+        if player.get('discord_id') == member.id:
+            await interaction.response.send_message(f"{member.mention} is in the inactive list! Use /from_inactive to move them back.", ephemeral=True)
             return
     
     # Add player
@@ -704,7 +757,8 @@ async def add_player(interaction: discord.Interaction, game_name: str, member: d
         'game_name': game_name,
         'discord_id': member.id,
         'owed': 0,
-        'last_mvp_type': ''
+        'last_mvp_type': '',
+        'last_had_title': False
     }
     data['rotation'].append(new_player)
     save_data(data)
