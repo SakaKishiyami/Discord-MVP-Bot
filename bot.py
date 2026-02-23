@@ -675,12 +675,17 @@ async def update_stats_channel(channel: discord.TextChannel, data: Dict):
 @bot.event
 async def on_ready():
     print(f'{bot.user} has logged in!')
+    print(f'Bot ID: {bot.user.id}')
     # Sync commands
     try:
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
+        print(f"✅ Synced {len(synced)} command(s)")
+        for cmd in synced:
+            print(f"  - /{cmd.name}")
     except Exception as e:
-        print(f"Failed to sync commands: {e}")
+        print(f"❌ Failed to sync commands: {e}")
+        import traceback
+        traceback.print_exc()
 
 @bot.tree.command(name="add_player", description="Add a player to the rotation")
 async def add_player(interaction: discord.Interaction, game_name: str, member: discord.Member):
