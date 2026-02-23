@@ -261,8 +261,15 @@ class PlayerActionView(discord.ui.View):
         
         officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
         if officer_channel:
+            await officer_channel.send(f"⬆️ **{interaction.user.mention}** moved **{self.player_name}** up in the rotation!")
             next_index = get_next_index(data)
             await update_officer_channel(officer_channel, data, next_index)
+        
+        # Update public rotation channel
+        public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+        if public_channel:
+            next_index = get_next_index(data)
+            await update_public_rotation_channel(public_channel, data, next_index)
     
     @discord.ui.button(label="Move Down", emoji="⬇️", style=discord.ButtonStyle.primary, row=0)
     async def move_down_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -290,8 +297,15 @@ class PlayerActionView(discord.ui.View):
         
         officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
         if officer_channel:
+            await officer_channel.send(f"⬇️ **{interaction.user.mention}** moved **{self.player_name}** down in the rotation!")
             next_index = get_next_index(data)
             await update_officer_channel(officer_channel, data, next_index)
+        
+        # Update public rotation channel
+        public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+        if public_channel:
+            next_index = get_next_index(data)
+            await update_public_rotation_channel(public_channel, data, next_index)
     
     @discord.ui.button(label="To Inactive", emoji="❌", style=discord.ButtonStyle.danger, row=0)
     async def to_inactive_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -318,8 +332,15 @@ class PlayerActionView(discord.ui.View):
         
         officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
         if officer_channel:
+            await officer_channel.send(f"❌ **{interaction.user.mention}** moved **{self.player_name}** to inactive list!")
             next_index = get_next_index(data)
             await update_officer_channel(officer_channel, data, next_index)
+        
+        # Update public rotation channel
+        public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+        if public_channel:
+            next_index = get_next_index(data)
+            await update_public_rotation_channel(public_channel, data, next_index)
 
 class MVPTypeView(discord.ui.View):
     """View for selecting MVP type"""
@@ -401,8 +422,15 @@ class TitleConfirmView(discord.ui.View):
             # Update channels
             officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
             if officer_channel:
+                await officer_channel.send(f"🎉 **{interaction.user.mention}** awarded **{self.mvp_type}** MVP to **{self.player_name}**!{title_text}")
                 next_index = get_next_index(data)
                 await update_officer_channel(officer_channel, data, next_index)
+            
+            # Update public rotation channel
+            public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+            if public_channel:
+                next_index = get_next_index(data)
+                await update_public_rotation_channel(public_channel, data, next_index)
             
             logs_channel_id = os.getenv('LOGS_CHANNEL_ID', os.getenv('OFFICER_CHANNEL_ID'))
             if logs_channel_id:
@@ -446,8 +474,15 @@ class InactiveActionView(discord.ui.View):
         
         officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
         if officer_channel:
+            await officer_channel.send(f"✅ **{interaction.user.mention}** moved **{self.player_name}** back to rotation!")
             next_index = get_next_index(data)
             await update_officer_channel(officer_channel, data, next_index)
+        
+        # Update public rotation channel
+        public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+        if public_channel:
+            next_index = get_next_index(data)
+            await update_public_rotation_channel(public_channel, data, next_index)
     
     @discord.ui.button(label="Remove", emoji="❌", style=discord.ButtonStyle.danger, row=0)
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -467,12 +502,19 @@ class InactiveActionView(discord.ui.View):
         inactive.pop(player_index)
         save_data(data)
         
-        await interaction.response.send_message(f"Removed {self.player_name} from guild!", ephemeral=True)
+        await interaction.response.send_message(f"Moved {self.player_name} to past members!", ephemeral=True)
         
         officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
         if officer_channel:
+            await officer_channel.send(f"🗑️ **{interaction.user.mention}** moved **{self.player_name}** to past members!")
             next_index = get_next_index(data)
             await update_officer_channel(officer_channel, data, next_index)
+        
+        # Update public rotation channel
+        public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+        if public_channel:
+            next_index = get_next_index(data)
+            await update_public_rotation_channel(public_channel, data, next_index)
 
 class PlayerManagementView(discord.ui.View):
     """Main view for managing players via select menus"""
@@ -564,6 +606,49 @@ class PlayerManagementView(discord.ui.View):
             ephemeral=True
         )
 
+def format_public_rotation_list(data: Dict, next_index: int) -> str:
+    """Format the rotation list for public display (no emoji indicators)"""
+    rotation = data.get('rotation', [])
+    if not rotation:
+        return "No players in rotation."
+    
+    lines = []
+    has_owed_players = any(p.get('owed', 0) > 0 for p in rotation)
+    
+    # Find the transition point: first player with owed
+    transition_index = None
+    for i, player in enumerate(rotation):
+        if player.get('owed', 0) > 0:
+            transition_index = i
+            break
+    
+    for i, player in enumerate(rotation):
+        game_name = player.get('game_name', 'Unknown')
+        discord_id = player.get('discord_id')
+        mention = f"<@{discord_id}>" if discord_id else ""
+        owed = player.get('owed', 0)
+        last_mvp = player.get('last_mvp_type', '')
+        mvp_symbol = MVP_TYPES.get(last_mvp, '') if last_mvp else ''
+        
+        owed_str = f" (+{owed})" if owed > 0 else ""
+        
+        # Add line break before first player with owed (if there are any)
+        if i == transition_index and transition_index is not None and transition_index > 0:
+            lines.append("")  # Line break
+        
+        # Check if last MVP had title
+        last_had_title = player.get('last_had_title', False)
+        title_emoji = " 👑" if last_had_title else ""
+        
+        if i == next_index:
+            # Next player - bigger and bolded
+            lines.append(f"**➜ {game_name}** {mention}{owed_str} {mvp_symbol}{title_emoji}")
+        else:
+            # Regular player
+            lines.append(f"{game_name} {mention}{owed_str} {mvp_symbol}{title_emoji}")
+    
+    return "\n".join(lines)
+
 async def update_officer_channel(channel: discord.TextChannel, data: Dict, next_index: int):
     """Update the officer channel with current rotation"""
     rotation_text = format_rotation_list(data, next_index)
@@ -586,6 +671,29 @@ async def update_officer_channel(channel: discord.TextChannel, data: Dict, next_
     
     # Create new message with view
     message = await channel.send(embed=embed, view=view)
+    return message
+
+async def update_public_rotation_channel(channel: discord.TextChannel, data: Dict, next_index: int):
+    """Update the public rotation channel (visible to everyone)"""
+    rotation_text = format_public_rotation_list(data, next_index)
+    
+    embed = discord.Embed(
+        title="🎯 MVP Rotation",
+        description=f"**Current Rotation:**\n{rotation_text}",
+        color=discord.Color.green()
+    )
+    
+    embed.set_footer(text="This rotation updates automatically when MVPs are awarded")
+    
+    # Find existing message or create new one
+    async for message in channel.history(limit=50):
+        if message.author == bot.user and message.embeds and "MVP Rotation" in str(message.embeds[0].title):
+            await message.edit(embed=embed)
+            return message
+    
+    # Create new message
+    message = await channel.send(embed=embed)
+    await message.pin()
     return message
 
 def format_stats(data: Dict) -> str:
@@ -763,13 +871,21 @@ async def add_player(interaction: discord.Interaction, game_name: str, member: d
     data['rotation'].append(new_player)
     save_data(data)
     
+    # Send ephemeral confirmation first
     await interaction.response.send_message(f"Added {game_name} ({member.mention}) to the rotation!", ephemeral=True)
     
-    # Update officer channel
+    # Also send public message in officer channel
     officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
     if officer_channel:
+        await officer_channel.send(f"✅ **{interaction.user.mention}** added **{game_name}** ({member.mention}) to the rotation!")
         next_index = get_next_index(data)
         await update_officer_channel(officer_channel, data, next_index)
+    
+    # Update public rotation channel
+    public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+    if public_channel:
+        next_index = get_next_index(data)
+        await update_public_rotation_channel(public_channel, data, next_index)
 
 @bot.tree.command(name="change_name", description="Change a player's in-game name")
 async def change_name(interaction: discord.Interaction, member: discord.Member, new_name: str):
@@ -786,8 +902,15 @@ async def change_name(interaction: discord.Interaction, member: discord.Member, 
             # Update officer channel
             officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
             if officer_channel:
+                await officer_channel.send(f"✏️ **{interaction.user.mention}** updated {member.mention}'s name to **{new_name}**!")
                 next_index = get_next_index(data)
                 await update_officer_channel(officer_channel, data, next_index)
+            
+            # Update public rotation channel
+            public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+            if public_channel:
+                next_index = get_next_index(data)
+                await update_public_rotation_channel(public_channel, data, next_index)
             return
     
     # Update in inactive
@@ -796,6 +919,11 @@ async def change_name(interaction: discord.Interaction, member: discord.Member, 
             player['game_name'] = new_name
             save_data(data)
             await interaction.response.send_message(f"Updated {member.mention}'s name to {new_name}!", ephemeral=True)
+            
+            # Also send public message
+            officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
+            if officer_channel:
+                await officer_channel.send(f"✏️ **{interaction.user.mention}** updated {member.mention}'s name to **{new_name}**!")
             return
     
     await interaction.response.send_message(f"{member.mention} not found in rotation or inactive list!", ephemeral=True)
@@ -1038,8 +1166,15 @@ async def move_up(interaction: discord.Interaction, member: discord.Member):
     # Update officer channel
     officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
     if officer_channel:
+        await officer_channel.send(f"⬆️ **{interaction.user.mention}** moved {member.mention} up one position!")
         next_index = get_next_index(data)
         await update_officer_channel(officer_channel, data, next_index)
+    
+    # Update public rotation channel
+    public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+    if public_channel:
+        next_index = get_next_index(data)
+        await update_public_rotation_channel(public_channel, data, next_index)
 
 @bot.tree.command(name="move_down", description="Move a player down one position")
 async def move_down(interaction: discord.Interaction, member: discord.Member):
@@ -1070,8 +1205,15 @@ async def move_down(interaction: discord.Interaction, member: discord.Member):
     # Update officer channel
     officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
     if officer_channel:
+        await officer_channel.send(f"⬇️ **{interaction.user.mention}** moved {member.mention} down one position!")
         next_index = get_next_index(data)
         await update_officer_channel(officer_channel, data, next_index)
+    
+    # Update public rotation channel
+    public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+    if public_channel:
+        next_index = get_next_index(data)
+        await update_public_rotation_channel(public_channel, data, next_index)
 
 @bot.tree.command(name="to_inactive", description="Move a player to inactive list")
 async def to_inactive(interaction: discord.Interaction, member: discord.Member):
@@ -1101,8 +1243,15 @@ async def to_inactive(interaction: discord.Interaction, member: discord.Member):
     # Update officer channel
     officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
     if officer_channel:
+        await officer_channel.send(f"❌ **{interaction.user.mention}** moved {member.mention} to inactive list!")
         next_index = get_next_index(data)
         await update_officer_channel(officer_channel, data, next_index)
+    
+    # Update public rotation channel
+    public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+    if public_channel:
+        next_index = get_next_index(data)
+        await update_public_rotation_channel(public_channel, data, next_index)
 
 @bot.tree.command(name="from_inactive", description="Move a player back from inactive list")
 async def from_inactive(interaction: discord.Interaction, member: discord.Member):
@@ -1132,8 +1281,15 @@ async def from_inactive(interaction: discord.Interaction, member: discord.Member
     # Update officer channel
     officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
     if officer_channel:
+        await officer_channel.send(f"✅ **{interaction.user.mention}** moved {member.mention} back to rotation!")
         next_index = get_next_index(data)
         await update_officer_channel(officer_channel, data, next_index)
+    
+    # Update public rotation channel
+    public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+    if public_channel:
+        next_index = get_next_index(data)
+        await update_public_rotation_channel(public_channel, data, next_index)
 
 @bot.tree.command(name="remove_player", description="Remove a player from the guild entirely")
 async def remove_player(interaction: discord.Interaction, member: discord.Member):
@@ -1154,8 +1310,15 @@ async def remove_player(interaction: discord.Interaction, member: discord.Member
             # Update channels
             officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
             if officer_channel:
+                await officer_channel.send(f"🗑️ **{interaction.user.mention}** moved {member.mention} to past members!")
                 next_index = get_next_index(data)
                 await update_officer_channel(officer_channel, data, next_index)
+                
+                # Update public rotation channel
+                public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+                if public_channel:
+                    next_index = get_next_index(data)
+                    await update_public_rotation_channel(public_channel, data, next_index)
             
             logs_channel_id = os.getenv('LOGS_CHANNEL_ID', os.getenv('OFFICER_CHANNEL_ID'))
             if logs_channel_id:
@@ -1178,8 +1341,15 @@ async def remove_player(interaction: discord.Interaction, member: discord.Member
             # Update channels
             officer_channel = bot.get_channel(int(os.getenv('OFFICER_CHANNEL_ID')))
             if officer_channel:
+                await officer_channel.send(f"🗑️ **{interaction.user.mention}** moved {member.mention} to past members!")
                 next_index = get_next_index(data)
                 await update_officer_channel(officer_channel, data, next_index)
+                
+                # Update public rotation channel
+                public_channel = bot.get_channel(int(os.getenv('PUBLIC_CHANNEL_ID')))
+                if public_channel:
+                    next_index = get_next_index(data)
+                    await update_public_rotation_channel(public_channel, data, next_index)
             
             logs_channel_id = os.getenv('LOGS_CHANNEL_ID', os.getenv('OFFICER_CHANNEL_ID'))
             if logs_channel_id:
